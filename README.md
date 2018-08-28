@@ -10,6 +10,8 @@ About METHOD:
 [Continuous control with deep reinforcement learning](https://arxiv.org/abs/1509.02971)
 
 # How to run
-Run ac_pendulum.py
-It shows animation every 5 episodes
-It reaches desired behaviour after around 40-60 episodes
+python ac_pendulum.py
+
+It shows animation every 5 episodes.
+It reaches desired behaviour after around 40-60 episodes.
+<img src="animation.gif">
