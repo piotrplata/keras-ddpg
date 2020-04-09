@@ -4,16 +4,18 @@ solving pendulum using actor-critic model
 
 import gym
 import numpy as np
-from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Input
-from keras.layers.merge import Add, Concatenate
-from keras.optimizers import Adam
-import keras.backend as K
+from tensorflow.compat.v1.keras.models import Sequential, Model
+from tensorflow.compat.v1.keras.layers import Dense, Dropout, Input
+from tensorflow.compat.v1.keras.layers import Add, Concatenate
+from tensorflow.compat.v1.keras.optimizers import Adam
+import tensorflow.compat.v1.keras.backend as K
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import random
 from collections import deque
+
+tf.disable_eager_execution()
 
 def stack_samples(samples):
 	array = np.array(samples)
@@ -85,7 +87,7 @@ class ActorCritic:
 		h3 = Dense(500, activation='relu')(h2)
 		output = Dense(self.env.action_space.shape[0], activation='tanh')(h3)
 
-		model = Model(input=state_input, output=output)
+		model = Model(inputs=state_input, outputs=output)
 		adam  = Adam(lr=0.0001)
 		model.compile(loss="mse", optimizer=adam)
 		return state_input, model
@@ -101,7 +103,7 @@ class ActorCritic:
 		merged    = Concatenate()([state_h2, action_h1])
 		merged_h1 = Dense(500, activation='relu')(merged)
 		output = Dense(1, activation='linear')(merged_h1)
-		model  = Model(input=[state_input,action_input], output=output)
+		model  = Model(inputs=[state_input,action_input], outputs=output)
 
 		adam  = Adam(lr=0.0001)
 		model.compile(loss="mse", optimizer=adam)
