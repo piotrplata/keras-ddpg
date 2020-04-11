@@ -1,8 +1,9 @@
 """
-solving pendulum using actor-critic model
+Solving USV guidance using actor-critic model
 """
 
 import gym
+import gym_usv.envs
 import numpy as np
 from tensorflow.compat.v1.keras.models import Sequential, Model
 from tensorflow.compat.v1.keras.layers import Dense, Dropout, Input
@@ -14,7 +15,6 @@ import tensorflow.compat.v1 as tf
 
 import random
 from collections import deque
-import time
 
 tf.disable_eager_execution()
 
@@ -40,7 +40,7 @@ class ActorCritic:
 		self.learning_rate = 0.0001
 		self.epsilon = .9
 		self.epsilon_decay = .99995
-		self.gamma = .90
+		self.gamma = .99
 		self.tau   = .01
 
 		# ===================================================================== #
@@ -50,7 +50,7 @@ class ActorCritic:
 		# Calculate de/dA as = de/dC * dC/dA, where e is error, C critic, A act #
 		# ===================================================================== #
 
-		self.memory = deque(maxlen=4000)
+		self.memory = deque(maxlen=10000)
 		self.actor_state_input, self.actor_model = self.create_actor_model()
 		_, self.target_actor_model = self.create_actor_model()
 
@@ -83,10 +83,9 @@ class ActorCritic:
 
 	def create_actor_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		h1 = Dense(500, activation='relu')(state_input)
-		h2 = Dense(1000, activation='relu')(h1)
-		h3 = Dense(500, activation='relu')(h2)
-		output = Dense(self.env.action_space.shape[0], activation='tanh')(h3)
+		h1 = Dense(400, activation='relu')(state_input)
+		h2 = Dense(300, activation='relu')(h1)
+		output = Dense(self.env.action_space.shape[0], activation='tanh')(h2)
 
 		model = Model(inputs=state_input, outputs=output)
 		adam  = Adam(lr=0.0001)
@@ -95,18 +94,18 @@ class ActorCritic:
 
 	def create_critic_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		state_h1 = Dense(500, activation='relu')(state_input)
-		state_h2 = Dense(1000)(state_h1)
+		state_h1 = Dense(400, activation='relu')(state_input)
+		state_h2 = Dense(300)(state_h1)
 
 		action_input = Input(shape=self.env.action_space.shape)
-		action_h1    = Dense(500)(action_input)
+		action_h1    = Dense(400)(action_input)
 
 		merged    = Concatenate()([state_h2, action_h1])
-		merged_h1 = Dense(500, activation='relu')(merged)
+		merged_h1 = Dense(400, activation='relu')(merged)
 		output = Dense(1, activation='linear')(merged_h1)
 		model  = Model(inputs=[state_input,action_input], outputs=output)
 
-		adam  = Adam(lr=0.0001)
+		adam  = Adam(lr=0.001)
 		model.compile(loss="mse", optimizer=adam)
 		return state_input, action_input, model
 
@@ -135,7 +134,7 @@ class ActorCritic:
    
 
 		cur_states, actions, rewards, new_states, dones = stack_samples(samples)
-		target_actions = self.target_actor_model.predict(new_states)
+		target_actions = self.target_actor_model.predict(new_states)*np.pi/2
 		future_rewards = self.target_critic_model.predict([new_states, target_actions])
 		
 		rewards += self.gamma * future_rewards * (1 - dones)
@@ -143,7 +142,7 @@ class ActorCritic:
 		evaluation = self.critic_model.fit([cur_states, actions], rewards, verbose=0)
 		#print(evaluation.history)
 	def train(self):
-		batch_size = 256
+		batch_size = 64
 		if len(self.memory) < batch_size:
 			return
 
@@ -185,47 +184,49 @@ class ActorCritic:
 		self.epsilon *= self.epsilon_decay
 		if np.random.random() < self.epsilon:
 			return self.env.action_space.sample()
-		return self.actor_model.predict(cur_state)*2
+		return self.actor_model.predict(cur_state)*np.pi/2
 
 
 
 def main():
 	sess = tf.Session()
 	K.set_session(sess)
-	env = gym.make("Pendulum-v0")
+	env = gym.make("usv-asmc-v0")
 	actor_critic = ActorCritic(env, sess)
 
 	num_trials = 10000
-	trial_len  = 200
+	trial_len  = 2000
+
+	starting_weights = 0
+	if starting_weights == 0:
+		print("Starting on new weights")
+	else:
+		actor_critic.actor_model.load_weights("./models/iteration" + str(starting_weights))
+		actor_critic.critic_model.load_weights("./models/critic/critic" + str(starting_weights))
+		actor_critic.target_actor_model.load_weights("./models/target_actor/target_actor" + str(starting_weights))
+		actor_critic.target_critic_model.load_weights("./models/target_critic/target_critic" + str(starting_weights))
+		print("Weights: " + str(starting_weights))
 
 	for i in range(num_trials):
-		print("trial:" + str(i))
+		print("trial: " + str(i))
 		cur_state = env.reset()
-		print("State:" + str(cur_state))
 		action = env.action_space.sample()
-		print("action:" + str(action))
 		reward_sum = 0
 		for j in range(trial_len):
 			#env.render()
-			print(str(j))
-			#env.render()
 			cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
-			print("State:" + str(cur_state))
 			action = actor_critic.act(cur_state)
-			print("action:" + str(action))
 			action = action.reshape((1, env.action_space.shape[0]))
-			print("action:" + str(action))
 
-			new_state, reward, done, _ = env.step(action)
-			print("new state:" + str(new_state))
-			reward += reward
+			new_state, reward, done, _ = env.step(action[0][0])
+			reward_sum += reward
 			if j == (trial_len - 1):
 				done = True
-				print(reward)
+				print("reward sum: " + str(reward_sum))
 
 			if (j % 5 == 0):
 				actor_critic.train()
-				actor_critic.update_target()   
+				actor_critic.update_target()
 			
 			new_state = new_state.reshape((1, env.observation_space.shape[0]))
 
@@ -234,13 +235,13 @@ def main():
 
 		if (i % 5 == 0):
 			cur_state = env.reset()
-			for j in range(500):
+			for j in range(2000):
 				env.render()
 				cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
 				action = actor_critic.act(cur_state)
 				action = action.reshape((1, env.action_space.shape[0]))
 
-				new_state, reward, done, _ = env.step(action)
+				new_state, reward, done, _ = env.step(action[0][0])
 				#reward += reward
 				#if j == (trial_len - 1):
 					#done = True
@@ -254,7 +255,12 @@ def main():
 
 				#actor_critic.remember(cur_state, action, reward, new_state, done)
 				cur_state = new_state
-				
+
+		if (i % 100 == 0):
+			actor_critic.actor_model.save_weights("./models/iteration" + str(i + starting_weights))
+			actor_critic.critic_model.save_weights("./models/critic/critic" + str(i + starting_weights))
+			actor_critic.target_actor_model.save_weights("./models/target_actor/target_actor" + str(starting_weights))
+			actor_critic.target_critic_model.save_weights("./models/target_critic/target_critic" + str(starting_weights))
 
 if __name__ == "__main__":
 	main()
