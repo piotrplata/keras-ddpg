@@ -41,7 +41,7 @@ class ActorCritic:
 		self.epsilon = .9
 		self.epsilon_decay = .99995
 		self.gamma = .99
-		self.tau   = .01
+		self.tau   = .001
 
 		# ===================================================================== #
 		#                               Actor Model                             #
@@ -50,7 +50,7 @@ class ActorCritic:
 		# Calculate de/dA as = de/dC * dC/dA, where e is error, C critic, A act #
 		# ===================================================================== #
 
-		self.memory = deque(maxlen=10000)
+		self.memory = deque(maxlen=20000)
 		self.actor_state_input, self.actor_model = self.create_actor_model()
 		_, self.target_actor_model = self.create_actor_model()
 
@@ -119,7 +119,7 @@ class ActorCritic:
 	def _train_actor(self, samples):
 		
 			cur_states, actions, rewards, new_states, _ =  stack_samples(samples)
-			predicted_actions = self.actor_model.predict(cur_states)
+			predicted_actions = self.actor_model.predict(cur_states)*np.pi/2
 			grads = self.sess.run(self.critic_grads, feed_dict={
 				self.critic_state_input:  cur_states,
 				self.critic_action_input: predicted_actions
@@ -181,11 +181,34 @@ class ActorCritic:
 	# ========================================================================= #
 
 	def act(self, cur_state):
-		self.epsilon *= self.epsilon_decay
+		'''self.epsilon *= self.epsilon_decay
 		if np.random.random() < self.epsilon:
-			return self.env.action_space.sample()
+			return self.env.action_space.sample()'''
 		return self.actor_model.predict(cur_state)*np.pi/2
 
+
+# Taken from https://github.com/openai/baselines/blob/master/baselines/ddpg/noise.py, which is
+# based on http://math.stackexchange.com/questions/1287634/implementing-ornstein-uhlenbeck-in-matlab
+class OrnsteinUhlenbeckActionNoise:
+    def __init__(self, mu, sigma=0.3, theta=.15, dt=1e-2, x0=None):
+        self.theta = theta
+        self.mu = mu
+        self.sigma = sigma
+        self.dt = dt
+        self.x0 = x0
+        self.reset()
+
+    def __call__(self):
+        x = self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt + \
+                self.sigma * np.sqrt(self.dt) * np.random.normal(size=self.mu.shape)
+        self.x_prev = x
+        return x
+
+    def reset(self):
+        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
+
+    def __repr__(self):
+        return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(self.mu, self.sigma)
 
 
 def main():
@@ -193,6 +216,7 @@ def main():
 	K.set_session(sess)
 	env = gym.make("usv-asmc-v0")
 	actor_critic = ActorCritic(env, sess)
+	actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
 
 	num_trials = 10000
 	trial_len  = 2000
@@ -208,14 +232,15 @@ def main():
 		print("Weights: " + str(starting_weights))
 
 	for i in range(num_trials):
-		print("trial: " + str(i))
+		print("trial: " + str(i + starting_weights))
 		cur_state = env.reset()
 		action = env.action_space.sample()
 		reward_sum = 0
 		for j in range(trial_len):
 			#env.render()
 			cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
-			action = actor_critic.act(cur_state)
+			action = actor_critic.act(cur_state) + actor_noise()
+			action = np.where(np.greater(np.abs(action), np.pi/2), (np.sign(action))*(np.abs(action)-np.pi), action)
 			action = action.reshape((1, env.action_space.shape[0]))
 
 			new_state, reward, done, _ = env.step(action[0][0])
@@ -234,7 +259,9 @@ def main():
 			cur_state = new_state
 
 		if (i % 5 == 0):
+			print("Render")
 			cur_state = env.reset()
+			reward_sum = 0
 			for j in range(2000):
 				env.render()
 				cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
@@ -242,10 +269,10 @@ def main():
 				action = action.reshape((1, env.action_space.shape[0]))
 
 				new_state, reward, done, _ = env.step(action[0][0])
-				#reward += reward
-				#if j == (trial_len - 1):
+				reward_sum += reward
+				if j == (2000 - 1):
 					#done = True
-					#print(reward)
+					print(reward_sum)
 
 				#if (j % 5 == 0):
 				#    actor_critic.train()
@@ -259,8 +286,8 @@ def main():
 		if (i % 100 == 0):
 			actor_critic.actor_model.save_weights("./models/iteration" + str(i + starting_weights))
 			actor_critic.critic_model.save_weights("./models/critic/critic" + str(i + starting_weights))
-			actor_critic.target_actor_model.save_weights("./models/target_actor/target_actor" + str(starting_weights))
-			actor_critic.target_critic_model.save_weights("./models/target_critic/target_critic" + str(starting_weights))
+			actor_critic.target_actor_model.save_weights("./models/target_actor/target_actor" + str(i + starting_weights))
+			actor_critic.target_critic_model.save_weights("./models/target_critic/target_critic" + str(i + starting_weights))
 
 if __name__ == "__main__":
 	main()
