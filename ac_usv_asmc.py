@@ -50,7 +50,7 @@ class ActorCritic:
 		# Calculate de/dA as = de/dC * dC/dA, where e is error, C critic, A act #
 		# ===================================================================== #
 
-		self.memory = deque(maxlen=20000)
+		self.memory = deque(maxlen=1000000)
 		self.actor_state_input, self.actor_model = self.create_actor_model()
 		_, self.target_actor_model = self.create_actor_model()
 
@@ -83,8 +83,8 @@ class ActorCritic:
 
 	def create_actor_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		h1 = Dense(400, activation='relu')(state_input)
-		h2 = Dense(300, activation='relu')(h1)
+		h1 = Dense(400, activation='tanh')(state_input)
+		h2 = Dense(300, activation='tanh')(h1)
 		output = Dense(self.env.action_space.shape[0], activation='tanh')(h2)
 
 		model = Model(inputs=state_input, outputs=output)
@@ -219,7 +219,7 @@ def main():
 	actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
 
 	num_trials = 10000
-	trial_len  = 2000
+	trial_len  = 400
 
 	starting_weights = 0
 	if starting_weights == 0:
@@ -243,15 +243,15 @@ def main():
 			action = np.where(np.greater(np.abs(action), np.pi/2), (np.sign(action))*(np.abs(action)-np.pi), action)
 			action = action.reshape((1, env.action_space.shape[0]))
 
-			new_state, reward, done, _ = env.step(action[0][0])
+			for k in range(5):
+				new_state, reward, done, _ = env.step(action[0][0])
 			reward_sum += reward
 			if j == (trial_len - 1):
 				done = True
 				print("reward sum: " + str(reward_sum))
 
-			if (j % 5 == 0):
-				actor_critic.train()
-				actor_critic.update_target()
+			actor_critic.train()
+			actor_critic.update_target()
 			
 			new_state = new_state.reshape((1, env.observation_space.shape[0]))
 
@@ -262,25 +262,21 @@ def main():
 			print("Render")
 			cur_state = env.reset()
 			reward_sum = 0
-			for j in range(2000):
-				env.render()
+			env.render()
+			for j in range(800):
 				cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
 				action = actor_critic.act(cur_state)
 				action = action.reshape((1, env.action_space.shape[0]))
 
-				new_state, reward, done, _ = env.step(action[0][0])
+				for k in range(5):
+					new_state, reward, done, _ = env.step(action[0][0])
+					env.render()
 				reward_sum += reward
-				if j == (2000 - 1):
-					#done = True
+				if j == (800 - 1):
 					print(reward_sum)
 
-				#if (j % 5 == 0):
-				#    actor_critic.train()
-				#    actor_critic.update_target()   
-				
 				new_state = new_state.reshape((1, env.observation_space.shape[0]))
 
-				#actor_critic.remember(cur_state, action, reward, new_state, done)
 				cur_state = new_state
 
 		if (i % 100 == 0):
