@@ -235,7 +235,8 @@ def main():
 		print("trial: " + str(i + starting_weights))
 		cur_state = env.reset()
 		action = env.action_space.sample()
-		reward_sum = 0
+		reward_sum = 0.
+		last_action = env.state[5]
 		for j in range(trial_len):
 			#env.render()
 			cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
@@ -244,7 +245,10 @@ def main():
 			action = action.reshape((1, env.action_space.shape[0]))
 
 			for k in range(5):
+				env.state[5] = last_action
 				new_state, reward, done, _ = env.step(action[0][0])
+
+			last_action = action[0][0]
 			reward_sum += reward
 			if j == (trial_len - 1):
 				done = True
@@ -261,22 +265,28 @@ def main():
 		if (i % 5 == 0):
 			print("Render")
 			cur_state = env.reset()
-			reward_sum = 0
+			reward_sum = 0.
+			last_action = env.state[5]
 			env.render()
-			for j in range(800):
+			for j in range(2*trial_len):
 				cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
 				action = actor_critic.act(cur_state)
 				action = action.reshape((1, env.action_space.shape[0]))
 
 				for k in range(5):
+					env.state[5] = last_action
 					new_state, reward, done, _ = env.step(action[0][0])
 					env.render()
+
+				last_action = action[0][0]
 				reward_sum += reward
-				if j == (800 - 1):
+				if j == (2*trial_len - 1):
+					done = True
 					print(reward_sum)
 
 				new_state = new_state.reshape((1, env.observation_space.shape[0]))
 
+				actor_critic.remember(cur_state, action, reward, new_state, done)
 				cur_state = new_state
 
 		if (i % 100 == 0):

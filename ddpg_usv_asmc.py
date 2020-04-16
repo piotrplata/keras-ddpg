@@ -7,7 +7,7 @@ import gym_usv.envs
 import numpy as np
 from tensorflow.compat.v1.keras.models import Sequential, Model
 from tensorflow.compat.v1.keras.layers import Dense, Dropout, Input
-from tensorflow.compat.v1.keras.layers import Add, Concatenate, BatchNormalization
+from tensorflow.compat.v1.keras.layers import Add, Concatenate
 from tensorflow.compat.v1.keras.optimizers import Adam
 from tensorflow.compat.v1.keras.initializers import RandomUniform
 import tensorflow.compat.v1.keras.backend as K
@@ -84,11 +84,8 @@ class ActorCritic:
 
 	def create_actor_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		state_input = BatchNormalization()(state_input)
 		h1 = Dense(400, activation='relu', bias_initializer='glorot_uniform')(state_input)
-		h1 = BatchNormalization()(h1)
 		h2 = Dense(300, activation='relu', bias_initializer='glorot_uniform')(h1)
-		h2 = BatchNormalization()(h2)
 		output = Dense(self.env.action_space.shape[0], activation='tanh', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(h2)
 
 		model = Model(inputs=state_input, outputs=output)
@@ -98,9 +95,7 @@ class ActorCritic:
 
 	def create_critic_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		state_input = BatchNormalization()(state_input)
 		state_h1 = Dense(400, activation='relu', bias_initializer='glorot_uniform')(state_input)
-		state_h1 = BatchNormalization()(state_h1)
 		state_h2 = Dense(300, activation='relu', bias_initializer='glorot_uniform')(state_h1)
 
 		action_input = Input(shape=self.env.action_space.shape)
