@@ -211,89 +211,116 @@ class OrnsteinUhlenbeckActionNoise:
         return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(self.mu, self.sigma)
 
 
-def main():
-	sess = tf.Session()
-	K.set_session(sess)
-	env = gym.make("usv-asmc-v0")
-	actor_critic = ActorCritic(env, sess)
-	actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
+sess = tf.Session()
+K.set_session(sess)
+env = gym.make("usv-asmc-v0")
+env_i = gym.make("usv-asmc-ye-int-v0")
+actor_critic = ActorCritic(env, sess)
+actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
 
-	num_trials = 10000
-	trial_len  = 400
+num_trials = 10000
+trial_len  = 400
 
-	starting_weights = 0
-	if starting_weights == 0:
-		print("Starting on new weights")
-	else:
-		actor_critic.actor_model.load_weights("./models/iteration" + str(starting_weights))
-		actor_critic.critic_model.load_weights("./models/critic/critic" + str(starting_weights))
-		actor_critic.target_actor_model.load_weights("./models/target_actor/target_actor" + str(starting_weights))
-		actor_critic.target_critic_model.load_weights("./models/target_critic/target_critic" + str(starting_weights))
-		print("Weights: " + str(starting_weights))
+starting_weights = 400
+if starting_weights == 0:
+	print("Starting on new weights")
+else:
+	actor_critic.actor_model.load_weights("./models/iteration" + str(starting_weights+1))
+	actor_critic.critic_model.load_weights("./models/critic/critic" + str(starting_weights))
+	actor_critic.target_actor_model.load_weights("./models/target_actor/target_actor" + str(starting_weights))
+	actor_critic.target_critic_model.load_weights("./models/target_critic/target_critic" + str(starting_weights))
+	print("Weights: " + str(starting_weights))
 
-	for i in range(num_trials):
-		print("trial: " + str(i + starting_weights))
+for i in range(num_trials):
+	print("trial: " + str(i + starting_weights))
+	cur_state = env.reset()
+	action = env.action_space.sample()
+	reward_sum = 0.
+	last_action = env.state[5]
+	for j in range(trial_len):
+		#env.render()
+		cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
+		action = actor_critic.act(cur_state) + actor_noise()
+		action = np.where(np.greater(np.abs(action), np.pi/2), (np.sign(action))*(np.abs(action)-np.pi), action)
+		action = action.reshape((1, env.action_space.shape[0]))
+
+		for k in range(5):
+			env.state[5] = last_action
+			new_state, reward, done, _ = env.step(action[0][0])
+
+		last_action = action[0][0]
+		reward_sum += reward
+		if j == (trial_len - 1):
+			done = True
+			print("reward sum: " + str(reward_sum))
+
+		actor_critic.train()
+		actor_critic.update_target()
+		
+		new_state = new_state.reshape((1, env.observation_space.shape[0]))
+
+		actor_critic.remember(cur_state, action, reward, new_state, done)
+		cur_state = new_state
+
+	if (i % 5 == 0):
+		print("Render")
 		cur_state = env.reset()
-		action = env.action_space.sample()
 		reward_sum = 0.
 		last_action = env.state[5]
-		for j in range(trial_len):
-			#env.render()
+		env.render()
+		for j in range(2*trial_len):
 			cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
-			action = actor_critic.act(cur_state) + actor_noise()
-			action = np.where(np.greater(np.abs(action), np.pi/2), (np.sign(action))*(np.abs(action)-np.pi), action)
+			action = actor_critic.act(cur_state)
 			action = action.reshape((1, env.action_space.shape[0]))
 
 			for k in range(5):
 				env.state[5] = last_action
 				new_state, reward, done, _ = env.step(action[0][0])
+				env.render()
 
 			last_action = action[0][0]
 			reward_sum += reward
-			if j == (trial_len - 1):
+			if j == (2*trial_len - 1):
 				done = True
 				print("reward sum: " + str(reward_sum))
+				print("e_u: " + str(env.state[0] - env.target[2]))
+				print("y_e: " + str(env.state[3]))
 
-			actor_critic.train()
-			actor_critic.update_target()
-			
 			new_state = new_state.reshape((1, env.observation_space.shape[0]))
 
 			actor_critic.remember(cur_state, action, reward, new_state, done)
 			cur_state = new_state
 
-		if (i % 5 == 0):
-			print("Render")
-			cur_state = env.reset()
-			reward_sum = 0.
-			last_action = env.state[5]
-			env.render()
-			for j in range(2*trial_len):
-				cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
-				action = actor_critic.act(cur_state)
-				action = action.reshape((1, env.action_space.shape[0]))
+	if (i % 20 == 0):
+		print("Render")
+		cur_state = env_i.reset()
+		reward_sum = 0.
+		last_action = env_i.state[5]
+		env_i.render()
+		for j in range(2*trial_len):
+			cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
+			action = actor_critic.act(cur_state)
+			action = action.reshape((1, env.action_space.shape[0]))
 
-				for k in range(5):
-					env.state[5] = last_action
-					new_state, reward, done, _ = env.step(action[0][0])
-					env.render()
+			for k in range(5):
+				env_i.state[5] = last_action
+				new_state, reward, done, _ = env_i.step(action[0][0])
+				env_i.render()
 
-				last_action = action[0][0]
-				reward_sum += reward
-				if j == (2*trial_len - 1):
-					done = True
-					print(reward_sum)
+			last_action = action[0][0]
+			reward_sum += reward
+			if j == (2*trial_len - 1):
+				done = True
+				print("reward sum: " + str(reward_sum))
+				print("e_u: " + str(env_i.state[0] - env_i.target[2]))
+				print("y_e: " + str(env_i.state[3]))
 
-				new_state = new_state.reshape((1, env.observation_space.shape[0]))
+			new_state = new_state.reshape((1, env_i.observation_space.shape[0]))
 
-				actor_critic.remember(cur_state, action, reward, new_state, done)
-				cur_state = new_state
+			cur_state = new_state
 
-		if (i % 100 == 0):
-			actor_critic.actor_model.save_weights("./models/iteration" + str(i + starting_weights))
-			actor_critic.critic_model.save_weights("./models/critic/critic" + str(i + starting_weights))
-			actor_critic.target_actor_model.save_weights("./models/target_actor/target_actor" + str(i + starting_weights))
-			actor_critic.target_critic_model.save_weights("./models/target_critic/target_critic" + str(i + starting_weights))
-
-if __name__ == "__main__":
-	main()
+	if (i % 100 == 0 and i > 1):
+		actor_critic.actor_model.save_weights("./models/iteration" + str(i + starting_weights))
+		actor_critic.critic_model.save_weights("./models/critic/critic" + str(i + starting_weights))
+		actor_critic.target_actor_model.save_weights("./models/target_actor/target_actor" + str(i + starting_weights))
+		actor_critic.target_critic_model.save_weights("./models/target_critic/target_critic" + str(i + starting_weights))

@@ -1,0 +1,2 @@
+model_checkpoint_path: "target_actor1300"
+all_model_checkpoint_paths: "target_actor1300"
