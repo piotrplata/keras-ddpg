@@ -7,7 +7,7 @@ import gym_usv.envs
 import numpy as np
 from tensorflow.compat.v1.keras.models import Sequential, Model
 from tensorflow.compat.v1.keras.layers import Dense, Dropout, Input
-from tensorflow.compat.v1.keras.layers import Add, Concatenate
+from tensorflow.compat.v1.keras.layers import Add, Concatenate, BatchNormalization
 from tensorflow.compat.v1.keras.optimizers import Adam
 from tensorflow.compat.v1.keras.initializers import RandomUniform
 import tensorflow.compat.v1.keras.backend as K
@@ -38,7 +38,7 @@ class ActorCritic:
 		self.env  = env
 		self.sess = sess
 
-		self.learning_rate = 0.001
+		self.learning_rate = 0.0001
 		self.epsilon = .9
 		self.epsilon_decay = .99995
 		self.gamma = .99
@@ -84,28 +84,38 @@ class ActorCritic:
 
 	def create_actor_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
+		#state_input_b = BatchNormalization()(state_input)
 		h1 = Dense(400, activation='relu', bias_initializer='glorot_uniform')(state_input)
+		#h1 = BatchNormalization()(h1)
 		h2 = Dense(300, activation='relu', bias_initializer='glorot_uniform')(h1)
+		#h2 = BatchNormalization()(h2)
 		output = Dense(self.env.action_space.shape[0], activation='tanh', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(h2)
 
 		model = Model(inputs=state_input, outputs=output)
-		adam  = Adam(lr=0.001)
+		adam  = Adam(lr=0.0001)
 		model.compile(loss="mse", optimizer=adam)
 		return state_input, model
 
 	def create_critic_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		state_h1 = Dense(400, activation='relu', bias_initializer='glorot_uniform')(state_input)
-		state_h2 = Dense(300, activation='relu', bias_initializer='glorot_uniform')(state_h1)
+		#state_input_b = BatchNormalization()(state_input)
+		state_h1 = Dense(800, activation='relu', bias_initializer='glorot_uniform')(state_input)
+		#state_h1 = BatchNormalization()(state_h1)
+		state_h2 = Dense(600, activation='relu', bias_initializer='glorot_uniform')(state_h1)
+		#state_h2 = BatchNormalization()(state_h2)
 
 		action_input = Input(shape=self.env.action_space.shape)
-		action_h1    = Dense(300, activation='relu', bias_initializer='glorot_uniform')(action_input)
+		#action_input_b = BatchNormalization()(action_input)
+		action_h1    = Dense(600, activation='relu', bias_initializer='glorot_uniform')(action_input)
+		#action_h1    = BatchNormalization()(action_h1)
 
 		merged = Add()([state_h2, action_h1])
-		output = Dense(1, activation='linear', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(merged)
+		#merged = BatchNormalization()(merged)
+		merged_h2 = Dense(600, activation='relu', bias_initializer='glorot_uniform')(merged)
+		output = Dense(1, activation='linear', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(merged_h2)
 		model  = Model(inputs=[state_input,action_input], outputs=output)
 
-		adam  = Adam(lr=0.0001)
+		adam  = Adam(lr=0.001, decay=0.01)
 		model.compile(loss="mse", optimizer=adam)
 		return state_input, action_input, model
 
@@ -139,7 +149,7 @@ class ActorCritic:
 		
 		rewards += self.gamma * future_rewards * (1 - dones)
 		
-		evaluation = self.critic_model.fit([cur_states, actions], rewards, verbose=0)
+		self.evaluation = self.critic_model.fit([cur_states, actions], rewards, verbose=0)
 		#print(evaluation.history)
 	def train(self):
 		batch_size = 64
@@ -211,79 +221,97 @@ class OrnsteinUhlenbeckActionNoise:
         return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(self.mu, self.sigma)
 
 
-def main():
-	sess = tf.Session()
-	K.set_session(sess)
-	env = gym.make("usv-asmc-v0")
-	actor_critic = ActorCritic(env, sess)
-	actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
+sess = tf.Session()
+K.set_session(sess)
+env = gym.make("usv-asmc-v0")
+actor_critic = ActorCritic(env, sess)
+actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
 
-	num_trials = 10000
-	trial_len  = 400
+num_trials = 10000
+trial_len  = 400
 
-	starting_weights = 0
-	if starting_weights == 0:
-		print("Starting on new weights")
-	else:
-		actor_critic.actor_model.load_weights("./ddpg_models/iteration" + str(starting_weights))
-		actor_critic.critic_model.load_weights("./ddpg_models/critic/critic" + str(starting_weights))
-		actor_critic.target_actor_model.load_weights("./ddpg_models/target_actor/target_actor" + str(starting_weights))
-		actor_critic.target_critic_model.load_weights("./ddpg_models/target_critic/target_critic" + str(starting_weights))
-		print("Weights: " + str(starting_weights))
+starting_weights = 0
+if starting_weights == 0:
+	print("Starting on new weights")
+else:
+	actor_critic.actor_model.load_weights("./ddpg_models/iteration" + str(starting_weights))
+	actor_critic.critic_model.load_weights("./ddpg_models/critic/critic" + str(starting_weights))
+	actor_critic.target_actor_model.load_weights("./ddpg_models/target_actor/target_actor" + str(starting_weights))
+	actor_critic.target_critic_model.load_weights("./ddpg_models/target_critic/target_critic" + str(starting_weights))
+	print("Weights: " + str(starting_weights))
 
-	for i in range(num_trials):
-		print("trial: " + str(i + starting_weights))
+for i in range(num_trials):
+	print("trial: " + str(i + starting_weights))
+	cur_state = env.reset()
+	action = env.action_space.sample()
+	reward_sum = 0.
+	last_action = env.state[5]
+	for j in range(trial_len):
+		#env.render()
+		cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
+		action = actor_critic.act(cur_state) + actor_noise()
+		action = np.where(np.greater(np.abs(action), np.pi/2), (np.sign(action))*(np.abs(action)-np.pi), action)
+		action = action.reshape((1, env.action_space.shape[0]))
+
+		for k in range(5):
+			env.state[5] = last_action
+			new_state, reward, done, _ = env.step(action[0][0])
+
+		last_action = action[0][0]
+		reward_sum += reward
+		if j == (trial_len - 1):
+			print("reward sum: " + str(reward_sum))
+
+		if done == True:
+			print("reward sum: " + str(reward_sum))
+			break
+
+		actor_critic.train()
+		actor_critic.update_target()
+		
+		new_state = new_state.reshape((1, env.observation_space.shape[0]))
+
+		actor_critic.remember(cur_state, action, reward, new_state, done)
+		cur_state = new_state
+
+	if (i % 5 == 0):
+		print("Render")
 		cur_state = env.reset()
-		action = env.action_space.sample()
-		reward_sum = 0
-		for j in range(trial_len):
-			#env.render()
+		reward_sum = 0.
+		last_action = env.state[5]
+		env.render()
+		for j in range(600):
 			cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
-			action = actor_critic.act(cur_state) + actor_noise()
-			action = np.where(np.greater(np.abs(action), np.pi/2), (np.sign(action))*(np.abs(action)-np.pi), action)
+			action = actor_critic.act(cur_state)
 			action = action.reshape((1, env.action_space.shape[0]))
 
 			for k in range(5):
+				env.state[5] = last_action
 				new_state, reward, done, _ = env.step(action[0][0])
-			reward_sum += reward
-			if j == (trial_len - 1):
-				done = True
-				print("reward sum: " + str(reward_sum))
+				env.render()
 
-			actor_critic.train()
-			actor_critic.update_target()
+			last_action = action[0][0]
+			reward_sum += reward
+			if j == (600 - 1):
+				print("reward: " + str(reward))
+				print("reward sum: " + str(reward_sum))
+				print("e_u: " + str(env.state[0] - env.target[2]))
+				print("y_e: " + str(env.state[3]))
 			
+			if done == True:
+				print("reward: " + str(reward))
+				print("reward sum: " + str(reward_sum))
+				print("e_u: " + str(env.state[0] - env.target[2]))
+				print("y_e: " + str(env.state[3]))
+				break
+
 			new_state = new_state.reshape((1, env.observation_space.shape[0]))
 
 			actor_critic.remember(cur_state, action, reward, new_state, done)
 			cur_state = new_state
 
-		if (i % 5 == 0):
-			print("Render")
-			cur_state = env.reset()
-			reward_sum = 0
-			env.render()
-			for j in range(trial_len):
-				cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
-				action = actor_critic.act(cur_state)
-				action = action.reshape((1, env.action_space.shape[0]))
-
-				for k in range(5):
-					new_state, reward, done, _ = env.step(action[0][0])
-					env.render()
-				reward_sum += reward
-				if j == (trial_len - 1):
-					print(reward_sum)
-
-				new_state = new_state.reshape((1, env.observation_space.shape[0]))
-
-				cur_state = new_state
-
-		if (i % 100 == 0):
-			actor_critic.actor_model.save_weights("./ddpg_models/iteration" + str(i + starting_weights))
-			actor_critic.critic_model.save_weights("./ddpg_models/critic/critic" + str(i + starting_weights))
-			actor_critic.target_actor_model.save_weights("./ddpg_models/target_actor/target_actor" + str(i + starting_weights))
-			actor_critic.target_critic_model.save_weights("./ddpg_models/target_critic/target_critic" + str(i + starting_weights))
-
-if __name__ == "__main__":
-	main()
+	if (i % 100 == 0 and i > 1):
+		actor_critic.actor_model.save_weights("./ddpg_models/iteration" + str(i + starting_weights))
+		actor_critic.critic_model.save_weights("./ddpg_models/critic/critic" + str(i + starting_weights))
+		actor_critic.target_actor_model.save_weights("./ddpg_models/target_actor/target_actor" + str(i + starting_weights))
+		actor_critic.target_critic_model.save_weights("./ddpg_models/target_critic/target_critic" + str(i + starting_weights))

@@ -7,7 +7,7 @@ import gym_usv.envs
 import numpy as np
 from tensorflow.compat.v1.keras.models import Sequential, Model
 from tensorflow.compat.v1.keras.layers import Dense, Dropout, Input
-from tensorflow.compat.v1.keras.layers import Add, Concatenate
+from tensorflow.compat.v1.keras.layers import Add, Concatenate, LeakyReLU
 from tensorflow.compat.v1.keras.optimizers import Adam
 import tensorflow.compat.v1.keras.backend as K
 
@@ -94,14 +94,14 @@ class ActorCritic:
 
 	def create_critic_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
-		state_h1 = Dense(400, activation='relu')(state_input)
+		state_h1 = Dense(400, activation=LeakyReLU(alpha=0.01))(state_input)
 		state_h2 = Dense(300)(state_h1)
 
 		action_input = Input(shape=self.env.action_space.shape)
 		action_h1    = Dense(400)(action_input)
 
 		merged    = Concatenate()([state_h2, action_h1])
-		merged_h1 = Dense(400, activation='relu')(merged)
+		merged_h1 = Dense(400, activation=LeakyReLU(alpha=0.01))(merged)
 		output = Dense(1, activation='linear')(merged_h1)
 		model  = Model(inputs=[state_input,action_input], outputs=output)
 
@@ -221,7 +221,7 @@ actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
 num_trials = 10000
 trial_len  = 400
 
-starting_weights = 400
+starting_weights = 0
 if starting_weights == 0:
 	print("Starting on new weights")
 else:
