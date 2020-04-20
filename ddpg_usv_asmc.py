@@ -99,19 +99,19 @@ class ActorCritic:
 	def create_critic_model(self):
 		state_input = Input(shape=self.env.observation_space.shape)
 		#state_input_b = BatchNormalization()(state_input)
-		state_h1 = Dense(800, activation='relu', bias_initializer='glorot_uniform')(state_input)
+		state_h1 = Dense(400, activation='relu', bias_initializer='glorot_uniform')(state_input)
 		#state_h1 = BatchNormalization()(state_h1)
-		state_h2 = Dense(600, activation='relu', bias_initializer='glorot_uniform')(state_h1)
+		state_h2 = Dense(300, activation='relu', bias_initializer='glorot_uniform')(state_h1)
 		#state_h2 = BatchNormalization()(state_h2)
 
 		action_input = Input(shape=self.env.action_space.shape)
 		#action_input_b = BatchNormalization()(action_input)
-		action_h1    = Dense(600, activation='relu', bias_initializer='glorot_uniform')(action_input)
+		action_h1    = Dense(300, activation='relu', bias_initializer='glorot_uniform')(action_input)
 		#action_h1    = BatchNormalization()(action_h1)
 
 		merged = Add()([state_h2, action_h1])
 		#merged = BatchNormalization()(merged)
-		merged_h2 = Dense(600, activation='relu', bias_initializer='glorot_uniform')(merged)
+		merged_h2 = Dense(300, activation='relu', bias_initializer='glorot_uniform')(merged)
 		output = Dense(1, activation='linear', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(merged_h2)
 		model  = Model(inputs=[state_input,action_input], outputs=output)
 
