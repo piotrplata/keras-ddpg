@@ -223,14 +223,14 @@ class OrnsteinUhlenbeckActionNoise:
 
 sess = tf.Session()
 K.set_session(sess)
-env = gym.make("usv-asmc-v0")
+env = gym.make("usv-pid-v0")
 actor_critic = ActorCritic(env, sess)
 actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
 
-num_trials = 10000
+num_trials = 1500
 trial_len  = 400
 
-starting_weights = 0
+starting_weights = 1500
 if starting_weights == 0:
 	print("Starting on new weights")
 else:
