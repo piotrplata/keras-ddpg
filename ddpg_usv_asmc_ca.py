@@ -86,8 +86,8 @@ class ActorCritic:
         state_input = Input(shape=self.env.observation_space.shape)
         h1 = Dense(400, activation='relu', bias_initializer='glorot_uniform')(state_input)
         h2 = Dense(300, activation='relu', bias_initializer='glorot_uniform')(h1)
-        output_0 = Dense(1, activation='tanh', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(h2)
-        output_1 = Dense(1, activation='sigmoid', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(h2)
+        output_0 = Dense(1, activation='sigmoid', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(h2)
+        output_1 = Dense(1, activation='tanh', kernel_initializer=RandomUniform(-3e-3, 3e-3), bias_initializer=RandomUniform(-3e-3, 3e-3))(h2)
         output = Concatenate()([output_0, output_1])
 
         model = Model(inputs=state_input, outputs=output)
@@ -226,7 +226,7 @@ if starting_weights == 0:
     print("Starting on new weights")
 else:
     actor_critic.actor_model.load_weights("./ddpg_models/iteration" + str(starting_weights))
-    actor_critic.critic_model.load_weights("./ddpg_ca_models/critic/critic" + str(starting_weights))
+    actor_critic.critic_model.load_weights("./ddpg_models/critic/critic" + str(starting_weights))
     actor_critic.target_actor_model.load_weights("./ddpg_models/target_actor/target_actor" + str(starting_weights))
     actor_critic.target_critic_model.load_weights("./ddpg_models/target_critic/target_critic" + str(starting_weights))
     print("Weights: " + str(starting_weights))
@@ -272,7 +272,7 @@ for i in range(num_trials):
         action0_last = env.state[32]
         action1_last = env.state[33]
         env.render()
-        for j in range(600):
+        for j in range(400):
             cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
             action = actor_critic.act(cur_state)
             action = action.reshape((1, env.action_space.shape[0]))
