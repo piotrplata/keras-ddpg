@@ -219,7 +219,7 @@ actor_critic = ActorCritic(env, sess)
 actor_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(1))
 
 num_trials = 1500
-trial_len  = 400
+trial_len  = 200
 
 starting_weights = 0
 if starting_weights == 0:
@@ -272,7 +272,7 @@ for i in range(num_trials):
         action0_last = env.state[32]
         action1_last = env.state[33]
         env.render()
-        for j in range(400):
+        for j in range(300):
             cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
             action = actor_critic.act(cur_state)
             action = action.reshape((1, env.action_space.shape[0]))
@@ -283,7 +283,7 @@ for i in range(num_trials):
             action0_last = action[0][0]
             action1_last = action[0][1]
             reward_sum += reward
-            if j == (600 - 1):
+            if j == (300 - 1):
                 print("reward: " + str(reward))
                 print("reward sum: " + str(reward_sum))
                 print("e_u: " + str(env.state[0] - env.state[6]))
