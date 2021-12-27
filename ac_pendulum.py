@@ -4,16 +4,19 @@ solving pendulum using actor-critic model
 
 import gym
 import numpy as np
-from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Input
-from keras.layers.merge import Add, Concatenate
-from keras.optimizers import Adam
-import keras.backend as K
+from tensorflow.compat.v1.keras.models import Sequential, Model
+from tensorflow.compat.v1.keras.layers import Dense, Dropout, Input
+from tensorflow.compat.v1.keras.layers import Add, Concatenate
+from tensorflow.compat.v1.keras.optimizers import Adam
+import tensorflow.compat.v1.keras.backend as K
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 import random
 from collections import deque
+import time
+
+tf.disable_eager_execution()
 
 def stack_samples(samples):
 	array = np.array(samples)
@@ -85,7 +88,7 @@ class ActorCritic:
 		h3 = Dense(500, activation='relu')(h2)
 		output = Dense(self.env.action_space.shape[0], activation='tanh')(h3)
 
-		model = Model(input=state_input, output=output)
+		model = Model(inputs=state_input, outputs=output)
 		adam  = Adam(lr=0.0001)
 		model.compile(loss="mse", optimizer=adam)
 		return state_input, model
@@ -101,7 +104,7 @@ class ActorCritic:
 		merged    = Concatenate()([state_h2, action_h1])
 		merged_h1 = Dense(500, activation='relu')(merged)
 		output = Dense(1, activation='linear')(merged_h1)
-		model  = Model(input=[state_input,action_input], output=output)
+		model  = Model(inputs=[state_input,action_input], outputs=output)
 
 		adam  = Adam(lr=0.0001)
 		model.compile(loss="mse", optimizer=adam)
@@ -181,7 +184,7 @@ class ActorCritic:
 	def act(self, cur_state):
 		self.epsilon *= self.epsilon_decay
 		if np.random.random() < self.epsilon:
-			return self.actor_model.predict(cur_state)*2 + np.random.normal()
+			return self.env.action_space.sample()
 		return self.actor_model.predict(cur_state)*2
 
 
@@ -198,15 +201,23 @@ def main():
 	for i in range(num_trials):
 		print("trial:" + str(i))
 		cur_state = env.reset()
+		print("State:" + str(cur_state))
 		action = env.action_space.sample()
+		print("action:" + str(action))
 		reward_sum = 0
 		for j in range(trial_len):
 			#env.render()
+			print(str(j))
+			#env.render()
 			cur_state = cur_state.reshape((1, env.observation_space.shape[0]))
+			print("State:" + str(cur_state))
 			action = actor_critic.act(cur_state)
+			print("action:" + str(action))
 			action = action.reshape((1, env.action_space.shape[0]))
+			print("action:" + str(action))
 
 			new_state, reward, done, _ = env.step(action)
+			print("new state:" + str(new_state))
 			reward += reward
 			if j == (trial_len - 1):
 				done = True

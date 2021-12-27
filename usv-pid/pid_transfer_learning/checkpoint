@@ -1,0 +1,2 @@
+model_checkpoint_path: "iteration2000"
+all_model_checkpoint_paths: "iteration2000"
